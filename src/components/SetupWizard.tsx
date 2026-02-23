@@ -52,6 +52,7 @@ export function SetupWizard({ onComplete }: Props) {
   const [cameraUser, setCameraUser] = useState("admin");
   const [cameraPass, setCameraPass] = useState("");
   const [elevenlabsKey, setElevenlabsKey] = useState("");
+  const [voiceId, setVoiceId] = useState("cgSgspJ2msm6clMCkdW9");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -86,7 +87,7 @@ export function SetupWizard({ onComplete }: Props) {
           },
           tts: {
             elevenlabs_api_key: elevenlabsKey,
-            voice_id: "cgSgspJ2msm6clMCkdW9",
+            voice_id: voiceId,
           },
           mobility: {
             tuya_region: "us",
@@ -259,6 +260,20 @@ export function SetupWizard({ onComplete }: Props) {
                 onChange={(e) => setElevenlabsKey(e.target.value)}
               />
             </label>
+            <label className="field">
+              ボイスID
+              <input
+                type="text"
+                placeholder="cgSgspJ2msm6clMCkdW9"
+                value={voiceId}
+                onChange={(e) => setVoiceId(e.target.value)}
+              />
+            </label>
+            <p className="hint">
+              <a href="https://elevenlabs.io/app/voice-library" target="_blank" rel="noreferrer">
+                ElevenLabs Voice Library
+              </a> でIDを確認できます
+            </p>
           </details>
 
           {error && <p className="error">{error}</p>}
