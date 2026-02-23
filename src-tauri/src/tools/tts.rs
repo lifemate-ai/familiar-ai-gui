@@ -142,8 +142,15 @@ async fn play_audio(bytes: Vec<u8>) {
             .args([
                 "-c",
                 &format!(
-                    "(New-Object Media.SoundPlayer '{}').PlaySync()",
-                    tmp.display()
+                    "Add-Type -AssemblyName PresentationCore; \
+                     $p = [System.Windows.Media.MediaPlayer]::new(); \
+                     $p.Open([uri]'{path}'); \
+                     $p.Play(); \
+                     while ($p.NaturalDuration.HasTimeSpan -eq $false) {{ Start-Sleep -Milliseconds 100 }}; \
+                     $ms = $p.NaturalDuration.TimeSpan.TotalMilliseconds; \
+                     Start-Sleep -Milliseconds ($ms + 300); \
+                     $p.Close()",
+                    path = tmp.display()
                 ),
             ])
             .output()
