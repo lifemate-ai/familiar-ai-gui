@@ -1,52 +1,55 @@
-# familiar-gui
+# familiar-ai-gui
 
-AIに身体を与えるデスクトップアプリ。カメラ（目・首）・音声（声）・ロボット掃除機（足）・エピソード記憶を持つ AI コンパニオンを動かすための Tauri + React + Rust アプリ。
+A desktop app that gives an AI a body — camera (eyes & neck), voice, robot legs, and episodic memory.
+Built with Tauri + React + Rust.
+
+> 📖 [日本語版 README はこちら](README-ja.md)
 
 ## Features
 
-- **マルチ LLM 対応** — Kimi (Moonshot) / Claude (Anthropic) / Gemini (Google) / GPT (OpenAI)
-- **目・首** — ONVIF PTZ カメラで撮影・首振り（`see` / `look`）
-- **声** — ElevenLabs TTS でリアルタイム発話（`say`）
-- **足** — Tuya ロボット掃除機で移動（`walk`）
-- **記憶** — SQLite + 384 次元埋め込みベクトルによるエピソード記憶（`remember` / `recall`）
-- **欲求システム** — 内発的動機付けによる自律的な探索行動
+- **Multi-LLM** — Kimi (Moonshot) / Claude (Anthropic) / Gemini (Google) / GPT (OpenAI)
+- **Eyes & neck** — ONVIF PTZ camera for vision and pan/tilt (`see` / `look`)
+- **Voice** — ElevenLabs TTS with real-time speech (`say`)
+- **Legs** — Tuya robot vacuum for locomotion (`walk`)
+- **Memory** — Episodic memory via SQLite + 384-dim embedding vectors (`remember` / `recall`)
+- **Desire system** — Intrinsic motivation: the AI acts spontaneously when desires grow strong
 
-カメラ・TTS・移動はすべてオプションなので、API キーだけあれば動く。
+Camera, TTS, and mobility are all optional — only an LLM API key is required to run.
 
 ---
 
-## Prerequisites（前提条件）
+## Prerequisites
 
-| ツール | バージョン | インストール |
-|--------|-----------|-------------|
+| Tool | Version | Install |
+|------|---------|---------|
 | Node.js | 18+ | [nodejs.org](https://nodejs.org/) |
 | Rust | 1.80+ | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
 | Tauri CLI v2 | 2.x | `cargo install tauri-cli --version "^2"` |
-| ffmpeg | 任意 | RTSP カメラ使用時のみ必要 |
+| ffmpeg | any | Required only for RTSP camera snapshots |
 
 ---
 
 ## Setup & Run
 
 ```bash
-# 1. リポジトリのクローン
-git clone https://github.com/lifemate-ai/familiar-gui.git
-cd familiar-gui
+# 1. Clone
+git clone https://github.com/lifemate-ai/familiar-ai-gui.git
+cd familiar-ai-gui
 
-# 2. フロントエンド依存関係のインストール
+# 2. Install frontend dependencies
 npm install
 
-# 3. 開発モードで起動（ホットリロード）
+# 3. Start in development mode (hot reload)
 npm run tauri dev
 ```
 
-初回起動時にセットアップウィザードが開くので、LLM の API キーとペルソナを設定する（3 ステップ）。
+A setup wizard opens on first launch — enter your LLM API key and persona (3 steps).
 
-### プロダクションビルド
+### Production build
 
 ```bash
 npm run tauri build
-# 成果物: src-tauri/target/release/bundle/
+# Output: src-tauri/target/release/bundle/
 #   Linux:   .AppImage / .deb
 #   macOS:   .dmg
 #   Windows: .msi / .exe
@@ -54,35 +57,35 @@ npm run tauri build
 
 ---
 
-## Configuration（設定ファイル）
+## Configuration
 
-設定は GUI のウィザードで保存されるが、直接編集も可能。
+Settings are saved by the wizard, but can also be edited directly.
 
-**保存先:**
+**Location:**
 - Linux/macOS: `~/.config/familiar-ai/config.toml`
 - Windows: `%APPDATA%\familiar-ai\config.toml`
 
 ```toml
 platform = "kimi"          # kimi | anthropic | gemini | openai
-api_key = "sk-..."         # LLM API キー（必須）
-model = ""                 # 省略時はプラットフォームのデフォルト（下表参照）
-agent_name = "Kokone"      # AI の名前
-persona = "..."            # システムプロンプトに挿入されるペルソナ説明
-companion_name = "Kouta"   # 人間側の名前
+api_key = "sk-..."         # LLM API key (required)
+model = ""                 # Leave empty for platform default (see table below)
+agent_name = "Kokone"      # AI's name
+persona = "..."            # Persona description injected into system prompt
+companion_name = "Kouta"   # Your name
 
-# ONVIF PTZ カメラ（任意）
+# ONVIF PTZ camera (optional)
 [camera]
 host = "192.168.1.100"
 username = "admin"
 password = "password"
 onvif_port = 2020
 
-# ElevenLabs TTS（任意）
+# ElevenLabs TTS (optional)
 [tts]
 elevenlabs_api_key = "sk_..."
 voice_id = "cgSgspJ2msm6clMCkdW9"
 
-# Tuya ロボット掃除機（任意）
+# Tuya robot vacuum (optional)
 [mobility]
 tuya_region = "us"         # us | eu | in
 tuya_api_key = "..."
@@ -90,10 +93,10 @@ tuya_api_secret = "..."
 tuya_device_id = "..."
 ```
 
-### プラットフォーム別デフォルトモデル
+### Default models by platform
 
-| platform | デフォルトモデル |
-|----------|----------------|
+| platform | default model |
+|----------|--------------|
 | `kimi` | `kimi-k2.5` |
 | `anthropic` | `claude-haiku-4-5-20251001` |
 | `gemini` | `gemini-2.5-flash` |
@@ -101,62 +104,68 @@ tuya_device_id = "..."
 
 ---
 
-## Tools（エージェントが使えるツール）
+## Tools
 
-| ツール | 引数 | 説明 |
-|--------|------|------|
-| `see` | なし | カメラで撮影し AI に見せる |
-| `look` | `direction` (left/right/up/down/around), `degrees` (1-90) | カメラの向きを変える |
-| `say` | `text` | ElevenLabs で音声合成・発話（1〜2文） |
-| `walk` | `direction` (forward/backward/left/right/stop), `duration` (秒, 任意) | ロボット掃除機で移動 |
-| `remember` | `content`, `emotion`, `image_path` (任意) | エピソード記憶を保存 |
-| `recall` | `query`, `n` (件数) | 記憶を意味検索 |
+The agent can use the following tools:
 
----
-
-## Data（データ保存先）
-
-| データ | パス |
-|--------|------|
-| 設定ファイル | `~/.config/familiar-ai/config.toml` |
-| 記憶データベース | `~/.familiar_ai/observations.db` (SQLite) |
+| Tool | Args | Description |
+|------|------|-------------|
+| `see` | — | Capture a camera snapshot and show it to the AI |
+| `look` | `direction` (left/right/up/down/around), `degrees` (1–90) | Pan/tilt the camera |
+| `say` | `text`, `speaker` (camera/pc/both) | Speak aloud via ElevenLabs TTS |
+| `walk` | `direction` (forward/backward/left/right/stop), `duration` (s, optional) | Move the robot vacuum |
+| `remember` | `content`, `emotion`, `image_path` (optional) | Save an episodic memory |
+| `recall` | `query`, `n` (count) | Semantic memory search |
 
 ---
 
-## Testing（テスト）
+## Data
+
+| Data | Path |
+|------|------|
+| Config | `~/.config/familiar-ai/config.toml` |
+| Memory database | `~/.familiar_ai/observations.db` (SQLite) |
+
+---
+
+## Testing
 
 ```bash
 cd src-tauri
-cargo test
-# → 199 tests passing
+cargo test --lib
+# → 201 tests passing
 ```
 
 ---
 
-## Architecture（アーキテクチャ）
+## Architecture
 
 ```
 React frontend (Vite)
     ↕ Tauri IPC (invoke / event)
 Rust backend
-    ├── agent.rs        — ReAct エージェントループ
-    ├── desires.rs      — 欲求システム（内発的動機付け）
-    ├── backend/        — マルチ LLM アダプター
+    ├── agent.rs        — ReAct agent loop + desire-driven idle ticks
+    ├── desires.rs      — Desire system (observe_room / look_outside /
+    │                     browse_curiosity / miss_companion)
+    ├── backend/        — Multi-LLM adapters
     │   ├── kimi.rs
     │   ├── anthropic.rs
     │   ├── gemini.rs
     │   └── openai.rs
     └── tools/
-        ├── camera.rs   — ONVIF PTZ + RTSP スナップショット
-        ├── tts.rs      — ElevenLabs TTS
-        ├── mobility.rs — Tuya API (HMAC-SHA256 署名)
-        └── memory.rs   — SQLite + fastembed 埋め込みベクトル
+        ├── camera.rs   — ONVIF PTZ + RTSP snapshot
+        ├── tts.rs      — ElevenLabs TTS + Tapo camera speaker
+        ├── tapo_audio.rs — Tapo HTTP Stream audio backchannel
+        ├── mobility.rs — Tuya API (HMAC-SHA256 signing)
+        └── memory.rs   — SQLite + fastembed embedding vectors
 ```
 
-エージェントは ReAct ループで動作する：世界モデルの構築 → 記憶の想起 → LLM ストリーミング → ツール実行 → フィードバック → 繰り返し。
+The agent runs a ReAct loop: build world model → recall memories → LLM streaming → execute tools → feedback → repeat.
+
+A heartbeat thread fires an idle tick every 60 seconds when a desire exceeds the action threshold, enabling spontaneous behaviour without user input.
 
 ---
 
-## IDE Setup（推奨）
+## IDE Setup
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+[VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
