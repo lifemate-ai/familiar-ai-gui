@@ -49,6 +49,11 @@ impl Agent {
         }
     }
 
+    /// Returns true if any desire is above the action threshold.
+    pub fn has_strong_desire(&self) -> bool {
+        self.desires.strongest().is_some()
+    }
+
     pub fn clear_history(&mut self) {
         self.history.clear();
         // Reset desires on explicit clear (new session)
@@ -223,9 +228,11 @@ impl Agent {
                     })
                     .await;
 
-                // Boost explore desire when the agent actually looks around
-                if tc.name == "see" || tc.name == "look" {
-                    self.desires.boost("explore_object", 0.15);
+                // Boost room/outside curiosity when the agent uses the camera
+                if tc.name == "see" {
+                    self.desires.boost("observe_room", 0.15);
+                } else if tc.name == "look" {
+                    self.desires.boost("look_outside", 0.1);
                 }
 
                 let (text, image_b64) =

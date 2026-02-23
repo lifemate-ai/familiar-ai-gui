@@ -4,16 +4,16 @@ mod config;
 mod desires;
 mod tools;
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use agent::{Agent, AgentEvent};
 use config::Config;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::mpsc;
 
-/// Shared app state
+/// Shared app state — Arc so the heartbeat thread can hold a reference too.
 struct AppState {
-    agent: Mutex<Option<Agent>>,
+    agent: Arc<Mutex<Option<Agent>>>,
 }
 
 // ── Tauri commands ────────────────────────────────────────────────
@@ -46,36 +46,16 @@ async fn send_message(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    // Extract agent — we need to temporarily take it out to satisfy the borrow checker
-    let mut agent = {
-        let mut lock = state.agent.lock().unwrap();
-        lock.take().ok_or("Agent not initialized")?
-    };
+    run_agent_turn(message, app, state.agent.clone()).await
+}
 
-    let (tx, mut rx) = mpsc::channel::<AgentEvent>(64);
-
-    // Spawn event relay to frontend
-    let app_clone = app.clone();
-    let relay = tokio::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            let _ = app_clone.emit("agent-event", &event);
-            if matches!(event, AgentEvent::Done | AgentEvent::Error { .. }) {
-                break;
-            }
-        }
-    });
-
-    // Run agent
-    agent
-        .run(message, tx)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    relay.await.ok();
-
-    // Put agent back
-    *state.agent.lock().unwrap() = Some(agent);
-
+/// Clear conversation history.
+#[tauri::command]
+fn clear_history(state: State<AppState>) -> Result<(), String> {
+    let mut lock = state.agent.lock().unwrap();
+    if let Some(agent) = lock.as_mut() {
+        agent.clear_history();
+    }
     Ok(())
 }
 
@@ -99,30 +79,98 @@ fn save_me_md(content: String) -> Result<(), String> {
     std::fs::write(dir.join("ME.md"), content).map_err(|e| e.to_string())
 }
 
-/// Clear conversation history.
-#[tauri::command]
-fn clear_history(state: State<AppState>) -> Result<(), String> {
-    let mut lock = state.agent.lock().unwrap();
-    if let Some(agent) = lock.as_mut() {
-        agent.clear_history();
-    }
+// ── Shared agent runner ───────────────────────────────────────────
+
+/// Take the agent, run one turn, put it back. Used by both send_message and
+/// the heartbeat thread so the logic lives in one place.
+async fn run_agent_turn(
+    message: String,
+    app: AppHandle,
+    agent_arc: Arc<Mutex<Option<Agent>>>,
+) -> Result<(), String> {
+    let mut agent = {
+        let mut lock = agent_arc.lock().unwrap();
+        lock.take().ok_or("Agent not initialized")?
+    };
+
+    let (tx, mut rx) = mpsc::channel::<AgentEvent>(64);
+
+    let app_clone = app.clone();
+    let relay = tokio::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            let _ = app_clone.emit("agent-event", &event);
+            if matches!(event, AgentEvent::Done | AgentEvent::Error { .. }) {
+                break;
+            }
+        }
+    });
+
+    agent
+        .run(message, tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    relay.await.ok();
+
+    *agent_arc.lock().unwrap() = Some(agent);
     Ok(())
+}
+
+// ── Heartbeat thread ──────────────────────────────────────────────
+
+/// Spawns a background task that checks desires every `interval_secs` and
+/// fires an idle tick when a strong desire is present and the agent is free.
+fn spawn_heartbeat(agent_arc: Arc<Mutex<Option<Agent>>>, app: AppHandle, interval_secs: u64) {
+    tokio::spawn(async move {
+        let mut interval =
+            tokio::time::interval(tokio::time::Duration::from_secs(interval_secs));
+        interval.tick().await; // skip the immediate first tick
+
+        loop {
+            interval.tick().await;
+
+            // Check: is agent free AND does it have a strong desire?
+            let should_tick = {
+                let lock = agent_arc.lock().unwrap();
+                lock.as_ref()
+                    .map(|a| a.has_strong_desire())
+                    .unwrap_or(false)
+                // lock drops here — agent is still Some
+            };
+
+            if should_tick {
+                tracing::debug!("heartbeat: firing idle tick");
+                let _ = run_agent_turn(
+                    "(idle — your desires are active, act on them naturally)".to_string(),
+                    app.clone(),
+                    agent_arc.clone(),
+                )
+                .await;
+            }
+        }
+    });
 }
 
 // ── App entry point ───────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Load config and initialize agent if already set up
     let initial_agent = Config::load()
         .ok()
         .filter(|c| c.is_configured())
         .map(Agent::new);
 
+    let agent_arc = Arc::new(Mutex::new(initial_agent));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(AppState {
-            agent: Mutex::new(initial_agent),
+            agent: agent_arc.clone(),
+        })
+        .setup(move |app| {
+            // Heartbeat: check desires every 60 seconds
+            spawn_heartbeat(agent_arc.clone(), app.handle().clone(), 60);
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_config,
