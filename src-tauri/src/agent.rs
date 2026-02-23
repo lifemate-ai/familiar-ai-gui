@@ -299,7 +299,7 @@ fn format_action_label(name: &str, input: &Value) -> String {
         }
         "say" => {
             let text = input["text"].as_str().unwrap_or("");
-            let preview = &text[..text.len().min(30)];
+            let preview: String = text.chars().take(20).collect();
             format!("💬 \"{preview}...\"")
         }
         "walk" => {
