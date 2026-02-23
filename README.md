@@ -3,7 +3,7 @@
 A desktop app that gives an AI a body — camera (eyes & neck), voice, robot legs, and episodic memory.
 Built with Tauri + React + Rust.
 
-> 📖 [日本語版 README はこちら](README-ja.md)
+> 📖 [日本語](README-ja.md) | [中文](README-zh.md) | [繁體中文](README-zh-TW.md) | [Français](README-fr.md) | [Deutsch](README-de.md)
 
 ## Features
 

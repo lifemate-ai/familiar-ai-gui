@@ -1,6 +1,6 @@
 # familiar-ai-gui
 
-> 📖 [English README](README.md)
+> 📖 [English](README.md) | [中文](README-zh.md) | [繁體中文](README-zh-TW.md) | [Français](README-fr.md) | [Deutsch](README-de.md)
 
 AIに身体を与えるデスクトップアプリ。カメラ（目・首）・音声（声）・ロボット掃除機（足）・エピソード記憶を持つ AI コンパニオンを動かすための Tauri + React + Rust アプリ。
 
