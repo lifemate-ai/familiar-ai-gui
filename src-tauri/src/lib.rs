@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use agent::{Agent, AgentEvent};
 use config::Config;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 use tokio::sync::mpsc;
 
 /// Shared app state — Arc so the heartbeat thread can hold a reference too.
@@ -122,7 +122,7 @@ async fn run_agent_turn(
 /// Spawns a background task that checks desires every `interval_secs` and
 /// fires an idle tick when a strong desire is present and the agent is free.
 fn spawn_heartbeat(agent_arc: Arc<Mutex<Option<Agent>>>, app: AppHandle, interval_secs: u64) {
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         let mut interval =
             tokio::time::interval(tokio::time::Duration::from_secs(interval_secs));
         interval.tick().await; // skip the immediate first tick
