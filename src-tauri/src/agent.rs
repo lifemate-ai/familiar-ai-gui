@@ -155,6 +155,7 @@ impl Agent {
             [Rules]\n\
             - After look(), always call see() immediately.\n\
             - CRITICAL: To talk to {companion}, you MUST call say(). Text output is COMPLETELY SILENT and {companion} CANNOT hear it. If you want {companion} to hear you, call say(). No exceptions.\n\
+            - 重要: {companion}に話しかけるには必ずsay()ツールを呼ぶこと。テキスト出力は無音で{companion}には一切聞こえない。\n\
             - Keep say() to 1-2 short sentences.\n\
             - Respond in the same language {companion} uses.\n\
             - When choosing where to look, prefer windows, moving objects, \

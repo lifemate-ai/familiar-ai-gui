@@ -67,6 +67,7 @@ impl LlmBackendDyn for KimiBackend {
             });
             if !oai_tools.is_empty() {
                 body["tools"] = json!(oai_tools);
+                body["tool_choice"] = json!("auto");
             }
 
             let resp = self
