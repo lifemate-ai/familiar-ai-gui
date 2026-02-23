@@ -87,3 +87,102 @@ pub trait LlmBackendDyn: Send + Sync {
     fn make_user_message(&self, text: &str) -> serde_json::Value;
     fn make_tool_results(&self, results: &[ToolResult]) -> Vec<serde_json::Value>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+
+    fn config_with_platform(platform: &str) -> Config {
+        Config {
+            platform: platform.to_string(),
+            api_key: "test_key".to_string(),
+            ..Config::default()
+        }
+    }
+
+    // ── create_backend factory ────────────────────────────────────
+
+    #[test]
+    fn create_backend_anthropic_uses_content_string() {
+        let config = config_with_platform("anthropic");
+        let backend = create_backend(&config);
+        let msg = backend.make_user_message("hello");
+        // Anthropic: {"role":"user","content":"hello"}
+        assert_eq!(msg["role"], "user");
+        assert_eq!(msg["content"], "hello");
+    }
+
+    #[test]
+    fn create_backend_gemini_uses_parts_format() {
+        let config = config_with_platform("gemini");
+        let backend = create_backend(&config);
+        let msg = backend.make_user_message("hello");
+        // Gemini: {"role":"user","parts":[{"text":"hello"}]}
+        assert_eq!(msg["role"], "user");
+        assert!(msg.get("parts").is_some(), "Gemini should use 'parts' not 'content'");
+        assert!(msg.get("content").is_none());
+    }
+
+    #[test]
+    fn create_backend_openai_uses_content_string() {
+        let config = config_with_platform("openai");
+        let backend = create_backend(&config);
+        let msg = backend.make_user_message("hello");
+        assert_eq!(msg["role"], "user");
+        assert_eq!(msg["content"], "hello");
+    }
+
+    #[test]
+    fn create_backend_kimi_uses_content_string() {
+        let config = config_with_platform("kimi");
+        let backend = create_backend(&config);
+        let msg = backend.make_user_message("hello");
+        assert_eq!(msg["role"], "user");
+        assert_eq!(msg["content"], "hello");
+    }
+
+    #[test]
+    fn create_backend_unknown_defaults_to_kimi() {
+        let config = config_with_platform("unknown_platform_xyz");
+        let backend = create_backend(&config);
+        let msg = backend.make_user_message("hello");
+        // Kimi is default — same format as OpenAI: content string
+        assert_eq!(msg["role"], "user");
+        assert_eq!(msg["content"], "hello");
+        // Gemini would use "parts", so absence of "parts" confirms it's not Gemini
+        assert!(msg.get("parts").is_none());
+    }
+
+    #[test]
+    fn create_backend_anthropic_tool_result_format() {
+        let config = config_with_platform("anthropic");
+        let backend = create_backend(&config);
+        let results = vec![ToolResult {
+            call_id: "id1".to_string(),
+            text: "result".to_string(),
+            image_b64: None,
+        }];
+        let msgs = backend.make_tool_results(&results);
+        // Anthropic wraps all in a single user message with content array
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0]["role"], "user");
+        assert!(msgs[0]["content"].as_array().is_some());
+    }
+
+    #[test]
+    fn create_backend_openai_tool_result_format() {
+        let config = config_with_platform("openai");
+        let backend = create_backend(&config);
+        let results = vec![ToolResult {
+            call_id: "id1".to_string(),
+            text: "result".to_string(),
+            image_b64: None,
+        }];
+        let msgs = backend.make_tool_results(&results);
+        // OpenAI: separate message per tool result with role="tool"
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0]["role"], "tool");
+        assert_eq!(msgs[0]["tool_call_id"], "id1");
+    }
+}

@@ -52,3 +52,14 @@ uuid = { version = "1", features = ["v4"] }
 
 # futures
 futures = "0.3"
+
+# Memory — SQLite storage + multilingual embedding (Python版の忠実移植)
+rusqlite = { version = "0.31", features = ["bundled"] }
+fastembed = "4"
+
+# Crypto — HMAC-SHA256 for Tuya API signing, SHA1 for ONVIF WS-Security, MD5 for Digest auth
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+sha1 = "0.10"
+md-5 = "0.10"

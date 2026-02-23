@@ -51,6 +51,9 @@ pub struct Config {
     #[serde(default)]
     pub model: String,
     pub agent_name: String,
+    /// Persona is no longer stored in TOML — use ~/.familiar_ai/ME.md instead.
+    /// Kept with `skip_serializing` so existing configs don't break on load.
+    #[serde(default, skip_serializing)]
     pub persona: String,
     pub companion_name: String,
 

@@ -218,3 +218,119 @@ impl LlmBackendDyn for AnthropicBackend {
         vec![json!({"role": "user", "content": content})]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn backend() -> AnthropicBackend {
+        AnthropicBackend::new("test_key".to_string(), "claude-3-5-sonnet-20241022".to_string())
+    }
+
+    fn tool_result(id: &str, text: &str, image: Option<&str>) -> ToolResult {
+        ToolResult {
+            call_id: id.to_string(),
+            text: text.to_string(),
+            image_b64: image.map(|s| s.to_string()),
+        }
+    }
+
+    // ── make_user_message ─────────────────────────────────────────
+
+    #[test]
+    fn user_message_role_is_user() {
+        let msg = backend().make_user_message("hello");
+        assert_eq!(msg["role"], "user");
+    }
+
+    #[test]
+    fn user_message_content_equals_text() {
+        let msg = backend().make_user_message("hello world");
+        assert_eq!(msg["content"], "hello world");
+    }
+
+    #[test]
+    fn user_message_empty_text() {
+        let msg = backend().make_user_message("");
+        assert_eq!(msg["content"], "");
+    }
+
+    // ── make_tool_results ─────────────────────────────────────────
+
+    #[test]
+    fn tool_results_wrapped_in_user_message() {
+        let results = vec![tool_result("id1", "result text", None)];
+        let msgs = backend().make_tool_results(&results);
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0]["role"], "user");
+    }
+
+    #[test]
+    fn tool_result_content_has_tool_result_type() {
+        let results = vec![tool_result("id1", "text", None)];
+        let msgs = backend().make_tool_results(&results);
+        let content = &msgs[0]["content"][0];
+        assert_eq!(content["type"], "tool_result");
+        assert_eq!(content["tool_use_id"], "id1");
+    }
+
+    #[test]
+    fn tool_result_without_image_has_only_text_content() {
+        let results = vec![tool_result("id1", "only text", None)];
+        let msgs = backend().make_tool_results(&results);
+        let content_arr = msgs[0]["content"][0]["content"].as_array().unwrap();
+        assert_eq!(content_arr.len(), 1);
+        assert_eq!(content_arr[0]["type"], "text");
+        assert_eq!(content_arr[0]["text"], "only text");
+    }
+
+    #[test]
+    fn tool_result_with_image_has_text_and_image() {
+        let results = vec![tool_result("id1", "text", Some("base64data"))];
+        let msgs = backend().make_tool_results(&results);
+        let content_arr = msgs[0]["content"][0]["content"].as_array().unwrap();
+        assert_eq!(content_arr.len(), 2);
+        assert_eq!(content_arr[0]["type"], "text");
+        assert_eq!(content_arr[1]["type"], "image");
+        assert_eq!(content_arr[1]["source"]["type"], "base64");
+        assert_eq!(content_arr[1]["source"]["media_type"], "image/jpeg");
+        assert_eq!(content_arr[1]["source"]["data"], "base64data");
+    }
+
+    #[test]
+    fn multiple_tool_results_all_included() {
+        let results = vec![
+            tool_result("id1", "first", None),
+            tool_result("id2", "second", None),
+        ];
+        let msgs = backend().make_tool_results(&results);
+        // Both wrapped in single user message
+        assert_eq!(msgs.len(), 1);
+        let content_arr = msgs[0]["content"].as_array().unwrap();
+        assert_eq!(content_arr.len(), 2);
+    }
+
+    #[test]
+    fn empty_tool_results_returns_single_empty_user_message() {
+        let msgs = backend().make_tool_results(&[]);
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0]["role"], "user");
+    }
+
+    // ── convert_tools ─────────────────────────────────────────────
+
+    #[test]
+    fn convert_tools_uses_input_schema_key() {
+        let tool = ToolDef {
+            name: "test".to_string(),
+            description: "desc".to_string(),
+            input_schema: serde_json::json!({"type": "object"}),
+        };
+        let converted = AnthropicBackend::convert_tools(&[tool]);
+        assert_eq!(converted[0]["name"], "test");
+        assert_eq!(converted[0]["description"], "desc");
+        assert!(converted[0].get("input_schema").is_some());
+        // Anthropic uses "input_schema" not "parameters"
+        assert!(converted[0].get("parameters").is_none());
+    }
+}

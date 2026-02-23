@@ -1,6 +1,7 @@
 mod agent;
 mod backend;
 mod config;
+mod desires;
 mod tools;
 
 use std::sync::Mutex;
@@ -78,6 +79,26 @@ async fn send_message(
     Ok(())
 }
 
+/// Read ME.md from ~/.familiar_ai/ME.md (returns empty string if not found).
+#[tauri::command]
+fn get_me_md() -> String {
+    let path = dirs::home_dir()
+        .unwrap_or_default()
+        .join(".familiar_ai")
+        .join("ME.md");
+    std::fs::read_to_string(&path).unwrap_or_default()
+}
+
+/// Save ME.md to ~/.familiar_ai/ME.md.
+#[tauri::command]
+fn save_me_md(content: String) -> Result<(), String> {
+    let dir = dirs::home_dir()
+        .ok_or("Cannot determine home directory")?
+        .join(".familiar_ai");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join("ME.md"), content).map_err(|e| e.to_string())
+}
+
 /// Clear conversation history.
 #[tauri::command]
 fn clear_history(state: State<AppState>) -> Result<(), String> {
@@ -109,6 +130,8 @@ pub fn run() {
             is_configured,
             send_message,
             clear_history,
+            get_me_md,
+            save_me_md,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

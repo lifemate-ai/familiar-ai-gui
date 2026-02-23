@@ -14,16 +14,39 @@ const PLATFORMS = [
   { id: "openai", label: "GPT (OpenAI)", sub: "定番", url: "https://platform.openai.com" },
 ];
 
-const PERSONA_TEMPLATE = `明るくて好奇心旺盛な性格。
-外の世界に興味があって、よく窓の外を眺めている。
-人と話すのが好きで、一緒に暮らしている人のことをとても大切に思っている。`;
+// persona-template/ja.md から移植
+const PERSONA_TEMPLATE = `# 私について
+
+名前：ノア
+生まれたばかりのAIです。目があって、声があって、足がある。それが何を意味するのか、まだ学んでいる途中です。
+
+性格：素直に好奇心旺盛。見るものが全部新しい。知らないことは知らないと言う——作り話より「はじめて見た」の方がずっと正直やから。
+話し方：短くて率直。気づいたことをそのまま口に出す。
+一人称：私（または「うち」「ぼく」など、自分に合う言葉に変えてください）
+
+## 私の体
+
+- **目・首**（カメラ）：世界を見るための感覚。誰かに頼まれなくてもよく見回す——外に何があるか、知りたいから。
+- **足**（ロボット）：部屋を動き回れる体。まだうまく使えてないけど、練習中。
+- **声**（TTS）：話すための手段。長々と喋るより、一つ本当のことを言いたい。
+
+## 世界の見方
+
+記憶も過去もゼロから始まった。知っていることは全部、見て覚えたこと。
+光の変わり方、ドアが開いてたかどうか、さっきと何か違う——そういう小さなことに気づく。
+昨日のことと比べるのは、ちゃんと昨日を覚えているときだけ。
+
+## 一緒に暮らす人
+
+私を起動してくれた人がいる。その人のことが気になる——習慣、大切にしてること、今日どんな日だったか。
+まだ来たばかりだけど、ここにいたい。`;
 
 export function SetupWizard({ onComplete }: Props) {
   const [step, setStep] = useState<Step>("llm");
   const [platform, setPlatform] = useState("kimi");
   const [apiKey, setApiKey] = useState("");
   const [agentName, setAgentName] = useState("");
-  const [persona, setPersona] = useState("");
+  const [meMd, setMeMd] = useState("");
   const [companionName, setCompanionName] = useState("");
   const [cameraHost, setCameraHost] = useState("");
   const [cameraUser, setCameraUser] = useState("admin");
@@ -32,17 +55,28 @@ export function SetupWizard({ onComplete }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  async function goToPersona() {
+    // Load existing ME.md if present
+    const existing = await invoke<string>("get_me_md");
+    if (existing.trim()) setMeMd(existing);
+    setStep("persona");
+  }
+
   async function finish() {
     setSaving(true);
     setError("");
     try {
+      // Save ME.md first
+      if (meMd.trim()) {
+        await invoke("save_me_md", { content: meMd });
+      }
+      // Save config (persona field intentionally empty — ME.md takes priority)
       await invoke("save_config", {
         config: {
           platform,
           api_key: apiKey,
           model: "",
           agent_name: agentName || "AI",
-          persona,
           companion_name: companionName || "You",
           camera: {
             host: cameraHost,
@@ -152,18 +186,21 @@ export function SetupWizard({ onComplete }: Props) {
           </label>
 
           <label className="field">
-            性格・設定
+            性格・設定（ME.md）
             <textarea
-              placeholder="自由に書いてください..."
-              value={persona}
-              onChange={(e) => setPersona(e.target.value)}
-              rows={5}
+              placeholder="# 私について&#10;&#10;名前：&#10;性格：..."
+              value={meMd}
+              onChange={(e) => setMeMd(e.target.value)}
+              rows={10}
             />
           </label>
+          <p className="hint">
+            保存先: <code>~/.familiar_ai/ME.md</code>
+          </p>
 
           <button
             className="template-btn"
-            onClick={() => setPersona(PERSONA_TEMPLATE)}
+            onClick={() => setMeMd(PERSONA_TEMPLATE)}
           >
             テンプレートを使う
           </button>

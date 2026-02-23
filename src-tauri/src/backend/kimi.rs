@@ -224,3 +224,114 @@ impl LlmBackendDyn for KimiBackend {
         msgs
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn backend() -> KimiBackend {
+        KimiBackend::new("test_key".to_string(), "kimi-k2.5".to_string())
+    }
+
+    fn tool_result(id: &str, text: &str, image: Option<&str>) -> ToolResult {
+        ToolResult {
+            call_id: id.to_string(),
+            text: text.to_string(),
+            image_b64: image.map(|s| s.to_string()),
+        }
+    }
+
+    // ── make_user_message ─────────────────────────────────────────
+
+    #[test]
+    fn user_message_role_is_user() {
+        let msg = backend().make_user_message("hello");
+        assert_eq!(msg["role"], "user");
+    }
+
+    #[test]
+    fn user_message_content_is_string() {
+        let msg = backend().make_user_message("test content");
+        assert_eq!(msg["content"], "test content");
+    }
+
+    #[test]
+    fn user_message_empty_text() {
+        let msg = backend().make_user_message("");
+        assert_eq!(msg["content"], "");
+    }
+
+    // ── make_tool_results ─────────────────────────────────────────
+
+    #[test]
+    fn tool_result_role_is_tool() {
+        let results = vec![tool_result("id1", "text", None)];
+        let msgs = backend().make_tool_results(&results);
+        assert_eq!(msgs[0]["role"], "tool");
+    }
+
+    #[test]
+    fn tool_result_has_tool_call_id() {
+        let results = vec![tool_result("call_abc", "text", None)];
+        let msgs = backend().make_tool_results(&results);
+        assert_eq!(msgs[0]["tool_call_id"], "call_abc");
+    }
+
+    #[test]
+    fn tool_result_content_equals_text() {
+        let results = vec![tool_result("id1", "the result", None)];
+        let msgs = backend().make_tool_results(&results);
+        assert_eq!(msgs[0]["content"], "the result");
+    }
+
+    #[test]
+    fn tool_result_without_image_is_single_message() {
+        let results = vec![tool_result("id1", "text", None)];
+        let msgs = backend().make_tool_results(&results);
+        assert_eq!(msgs.len(), 1);
+    }
+
+    #[test]
+    fn tool_result_with_image_adds_user_message() {
+        let results = vec![tool_result("id1", "text", Some("b64data"))];
+        let msgs = backend().make_tool_results(&results);
+        assert_eq!(msgs.len(), 2, "Should have tool msg + image msg");
+        assert_eq!(msgs[1]["role"], "user");
+        let url = &msgs[1]["content"][0]["image_url"]["url"];
+        assert!(url.as_str().unwrap().contains("b64data"));
+        assert!(url.as_str().unwrap().starts_with("data:image/jpeg;base64,"));
+    }
+
+    #[test]
+    fn multiple_tool_results_each_get_tool_message() {
+        let results = vec![
+            tool_result("id1", "first", None),
+            tool_result("id2", "second", None),
+        ];
+        let msgs = backend().make_tool_results(&results);
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0]["tool_call_id"], "id1");
+        assert_eq!(msgs[1]["tool_call_id"], "id2");
+    }
+
+    // ── convert_tools ─────────────────────────────────────────────
+
+    #[test]
+    fn convert_tools_uses_function_wrapper() {
+        let tool = ToolDef {
+            name: "search".to_string(),
+            description: "Search something".to_string(),
+            input_schema: serde_json::json!({"type": "object"}),
+        };
+        let converted = KimiBackend::convert_tools(&[tool]);
+        assert_eq!(converted[0]["type"], "function");
+        assert_eq!(converted[0]["function"]["name"], "search");
+        assert!(converted[0]["function"].get("parameters").is_some());
+    }
+
+    #[test]
+    fn convert_tools_empty_returns_empty_vec() {
+        let converted = KimiBackend::convert_tools(&[]);
+        assert!(converted.is_empty());
+    }
+}
