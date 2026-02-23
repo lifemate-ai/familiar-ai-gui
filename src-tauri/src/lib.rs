@@ -2,6 +2,7 @@ mod agent;
 mod backend;
 mod config;
 mod desires;
+mod i18n;
 mod tools;
 
 use std::sync::{Arc, Mutex};

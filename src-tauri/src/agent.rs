@@ -282,17 +282,19 @@ fn load_me_md() -> Option<String> {
 }
 
 fn format_action_label(name: &str, input: &Value) -> String {
+    use crate::i18n::t;
     match name {
-        "see" => "📷 Looking...".to_string(),
+        "see" => t("action_see").to_string(),
         "look" => {
             let dir = input["direction"].as_str().unwrap_or("around");
-            match dir {
-                "left" => "↩️ Looking left...".to_string(),
-                "right" => "↪️ Looking right...".to_string(),
-                "up" => "⬆️ Looking up...".to_string(),
-                "down" => "⬇️ Looking down...".to_string(),
-                _ => "🔄 Looking around...".to_string(),
-            }
+            let key = match dir {
+                "left" => "action_look_left",
+                "right" => "action_look_right",
+                "up" => "action_look_up",
+                "down" => "action_look_down",
+                _ => "action_look_around",
+            };
+            t(key).to_string()
         }
         "say" => {
             let text = input["text"].as_str().unwrap_or("");
@@ -300,8 +302,15 @@ fn format_action_label(name: &str, input: &Value) -> String {
             format!("💬 \"{preview}...\"")
         }
         "walk" => {
-            let dir = input["direction"].as_str().unwrap_or("?");
-            format!("🚶 Walking {dir}...")
+            let dir = input["direction"].as_str().unwrap_or("stop");
+            let key = match dir {
+                "forward" => "action_walk_forward",
+                "backward" => "action_walk_backward",
+                "left" => "action_walk_left",
+                "right" => "action_walk_right",
+                _ => "action_walk_stop",
+            };
+            t(key).to_string()
         }
         _ => format!("⚙️ {name}..."),
     }

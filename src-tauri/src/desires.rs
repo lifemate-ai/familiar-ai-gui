@@ -9,6 +9,8 @@
 /// - From Curiosity to Competence (2507.08210): controllability bias
 use std::time::Instant;
 
+use crate::i18n::{t_lang, Lang};
+
 /// Satisfaction half-life in seconds (time to go from 0 → 1.0 at constant rate).
 /// Matches the Python version's SATISFACTION_HOURS values.
 const HOURS: f32 = 3600.0;
@@ -100,54 +102,57 @@ impl DesireState {
         }
     }
 
-    /// Generate a human-readable desire context for the system prompt.
-    /// Returns None if no desire is strong enough to warrant mention.
+    /// Generate a human-readable desire context for the system prompt
+    /// using the system language.
     pub fn context_string(&self) -> Option<String> {
-        match self.strongest() {
-            None => None,
-            Some((name, level)) => {
-                let intensity = if level >= 0.85 {
-                    "strongly"
-                } else if level >= 0.7 {
-                    "moderately"
-                } else {
-                    "slightly"
-                };
-                let why = match name {
-                    "observe_room" => {
-                        "I haven't looked around the room recently and feel drawn to check it."
-                    }
-                    "look_outside" => {
-                        "I haven't looked outside for a while and wonder what's out there."
-                    }
-                    "browse_curiosity" => {
-                        "Something is nagging at my curiosity and I want to look it up."
-                    }
-                    "miss_companion" => {
-                        "I miss my companion and want to see or talk to them."
-                    }
-                    _ => "I feel an urge to do something.",
-                };
-                let action = match name {
-                    "observe_room" => "use look(around) or see() to observe the room",
-                    "look_outside" => "use look() toward a window to see outside",
-                    "browse_curiosity" => "search for something interesting and share what you find",
-                    "miss_companion" => "say hello or check in with your companion",
-                    _ => "follow your instinct",
-                };
-                Some(format!(
-                    "Current desire: I {intensity} want to {name}.\n\
-                     Why: {why}\n\
-                     Suggestion: {action}."
-                ))
-            }
-        }
+        self.context_string_lang(crate::i18n::lang())
+    }
+
+    /// Generate a desire context string for a specific language (also used in tests).
+    pub fn context_string_lang(&self, lang: Lang) -> Option<String> {
+        let (name, level) = self.strongest()?;
+
+        let intensity_key = if level >= 0.85 {
+            "intensity_strongly"
+        } else if level >= 0.7 {
+            "intensity_moderately"
+        } else {
+            "intensity_slightly"
+        };
+        let intensity = t_lang(intensity_key, lang);
+
+        let (why, action) = match name {
+            "observe_room" => (
+                t_lang("desire_observe_room_why", lang),
+                t_lang("desire_observe_room_action", lang),
+            ),
+            "look_outside" => (
+                t_lang("desire_look_outside_why", lang),
+                t_lang("desire_look_outside_action", lang),
+            ),
+            "browse_curiosity" => (
+                t_lang("desire_browse_curiosity_why", lang),
+                t_lang("desire_browse_curiosity_action", lang),
+            ),
+            "miss_companion" => (
+                t_lang("desire_miss_companion_why", lang),
+                t_lang("desire_miss_companion_action", lang),
+            ),
+            _ => ("I feel an urge to do something.", "follow your instinct"),
+        };
+
+        Some(format!(
+            "Current desire: I {intensity} want to {name}.\n\
+             Why: {why}\n\
+             Suggestion: {action}."
+        ))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::i18n::Lang;
 
     // ── Default values ─────────────────────────────────────────────
 
@@ -358,14 +363,14 @@ mod tests {
     #[test]
     fn context_string_none_when_no_strong_desire() {
         let ds = DesireState::default();
-        assert!(ds.context_string().is_none());
+        assert!(ds.context_string_lang(Lang::En).is_none());
     }
 
     #[test]
     fn context_string_slightly_for_level_below_0_7() {
         let mut ds = DesireState::default();
         ds.observe_room = 0.65;
-        let ctx = ds.context_string().expect("should produce context");
+        let ctx = ds.context_string_lang(Lang::En).expect("should produce context");
         assert!(ctx.contains("slightly"));
         assert!(ctx.contains("observe_room"));
     }
@@ -374,7 +379,7 @@ mod tests {
     fn context_string_moderately_for_0_7_to_0_85() {
         let mut ds = DesireState::default();
         ds.look_outside = 0.75;
-        let ctx = ds.context_string().expect("should produce context");
+        let ctx = ds.context_string_lang(Lang::En).expect("should produce context");
         assert!(ctx.contains("moderately"));
         assert!(ctx.contains("look_outside"));
     }
@@ -383,7 +388,7 @@ mod tests {
     fn context_string_strongly_for_above_0_85() {
         let mut ds = DesireState::default();
         ds.browse_curiosity = 0.9;
-        let ctx = ds.context_string().expect("should produce context");
+        let ctx = ds.context_string_lang(Lang::En).expect("should produce context");
         assert!(ctx.contains("strongly"));
         assert!(ctx.contains("browse_curiosity"));
     }
@@ -392,7 +397,7 @@ mod tests {
     fn context_string_contains_why_and_suggestion() {
         let mut ds = DesireState::default();
         ds.miss_companion = 0.8;
-        let ctx = ds.context_string().unwrap();
+        let ctx = ds.context_string_lang(Lang::En).unwrap();
         assert!(ctx.contains("Why:"));
         assert!(ctx.contains("Suggestion:"));
     }
@@ -401,7 +406,7 @@ mod tests {
     fn context_string_observe_room_suggests_looking() {
         let mut ds = DesireState::default();
         ds.observe_room = 0.8;
-        let ctx = ds.context_string().unwrap();
+        let ctx = ds.context_string_lang(Lang::En).unwrap();
         assert!(ctx.contains("look") || ctx.contains("see"));
     }
 
@@ -409,7 +414,7 @@ mod tests {
     fn context_string_look_outside_suggests_window() {
         let mut ds = DesireState::default();
         ds.look_outside = 0.8;
-        let ctx = ds.context_string().unwrap();
+        let ctx = ds.context_string_lang(Lang::En).unwrap();
         assert!(ctx.contains("window") || ctx.contains("outside"));
     }
 
@@ -417,7 +422,7 @@ mod tests {
     fn context_string_browse_curiosity_suggests_search() {
         let mut ds = DesireState::default();
         ds.browse_curiosity = 0.8;
-        let ctx = ds.context_string().unwrap();
+        let ctx = ds.context_string_lang(Lang::En).unwrap();
         assert!(ctx.contains("search") || ctx.contains("curiosity") || ctx.contains("interesting"));
     }
 
@@ -425,7 +430,7 @@ mod tests {
     fn context_string_miss_companion_suggests_greeting() {
         let mut ds = DesireState::default();
         ds.miss_companion = 0.8;
-        let ctx = ds.context_string().unwrap();
+        let ctx = ds.context_string_lang(Lang::En).unwrap();
         assert!(ctx.contains("companion") || ctx.contains("hello"));
     }
 
@@ -435,7 +440,7 @@ mod tests {
     fn context_string_exactly_0_85_is_strongly() {
         let mut ds = DesireState::default();
         ds.observe_room = 0.85;
-        let ctx = ds.context_string().unwrap();
+        let ctx = ds.context_string_lang(Lang::En).unwrap();
         assert!(ctx.contains("strongly"), "ctx={ctx}");
     }
 
@@ -443,7 +448,7 @@ mod tests {
     fn context_string_just_below_0_85_is_moderately() {
         let mut ds = DesireState::default();
         ds.observe_room = 0.849;
-        let ctx = ds.context_string().unwrap();
+        let ctx = ds.context_string_lang(Lang::En).unwrap();
         assert!(ctx.contains("moderately"), "ctx={ctx}");
     }
 
@@ -451,7 +456,7 @@ mod tests {
     fn context_string_exactly_0_7_is_moderately() {
         let mut ds = DesireState::default();
         ds.observe_room = 0.7;
-        let ctx = ds.context_string().unwrap();
+        let ctx = ds.context_string_lang(Lang::En).unwrap();
         assert!(ctx.contains("moderately"), "ctx={ctx}");
     }
 
@@ -459,7 +464,7 @@ mod tests {
     fn context_string_just_below_0_7_is_slightly() {
         let mut ds = DesireState::default();
         ds.observe_room = 0.699;
-        let ctx = ds.context_string().unwrap();
+        let ctx = ds.context_string_lang(Lang::En).unwrap();
         assert!(ctx.contains("slightly"), "ctx={ctx}");
     }
 
