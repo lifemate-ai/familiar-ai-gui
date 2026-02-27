@@ -8,12 +8,23 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::backend::{create_backend, StopReason, ToolResult};
+use crate::coding;
 use crate::config::Config;
 use crate::desires::DesireState;
+use crate::feedback;
+use crate::permissions::{check_permission, PermCheck};
 use crate::tools::ToolRegistry;
+
+/// A pending permission request waiting for user response.
+pub struct PermRequest {
+    pub id: String,
+    pub tx: oneshot::Sender<bool>,
+}
 
 const MAX_ITERATIONS: usize = 50;
 
@@ -25,8 +36,12 @@ pub enum AgentEvent {
     Text { chunk: String },
     /// A tool is being called
     Action { name: String, label: String },
+    /// Permission confirmation needed before executing a tool
+    PermRequest { id: String, tool: String, detail: String },
     /// Agent finished (end_turn)
     Done,
+    /// Agent was cancelled by the user
+    Cancelled,
     /// Error
     Error { message: String },
 }
@@ -37,6 +52,8 @@ pub struct Agent {
     desires: DesireState,
     /// Cached world-model string, built on first run and persisted across turns.
     world_model: Option<String>,
+    /// Pending permission requests: id → oneshot sender
+    pub pending_perms: Arc<std::sync::Mutex<std::collections::HashMap<String, oneshot::Sender<bool>>>>,
 }
 
 impl Agent {
@@ -46,6 +63,15 @@ impl Agent {
             history: Vec::new(),
             desires: DesireState::default(),
             world_model: None,
+            pending_perms: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        }
+    }
+
+    /// Respond to a pending permission request.
+    pub fn respond_permission(&self, id: &str, allowed: bool) {
+        let mut lock = self.pending_perms.lock().unwrap();
+        if let Some(tx) = lock.remove(id) {
+            let _ = tx.send(allowed);
         }
     }
 
@@ -134,13 +160,29 @@ impl Agent {
             self.config.companion_name.clone()
         };
 
+        // Inject coding context when work_dir is configured
+        let coding_section = {
+            let wd = self.config.coding.effective_work_dir();
+            if wd.is_empty() {
+                String::new()
+            } else {
+                let ctx = coding::scan_project(&wd);
+                format!(
+                    "\n{}\n\n{}\n",
+                    coding::format_context(&ctx),
+                    coding::CODING_WORKFLOW
+                )
+            }
+        };
+
         format!(
             "{persona}\n\n\
             [World Model]\n\
             {world_model}\n\n\
             [Memory]\n\
             {memory_section}\
-            {desire_section}\n\
+            {desire_section}\
+            {coding_section}\n\
             [Body Parts and What They Do]\n\
             - Eyes (see): This IS your vision. Calling see() means YOU ARE LOOKING.\n\
             - Neck (look): Rotate your gaze left/right/up/down.\n\
@@ -169,7 +211,14 @@ impl Agent {
     // ── Main run loop ──────────────────────────────────────────────
 
     /// Run one user turn. Streams events via the sender.
-    pub async fn run(&mut self, user_input: String, tx: mpsc::Sender<AgentEvent>) -> Result<()> {
+    /// `cancel_flag`: set to true externally to abort the loop early.
+    pub async fn run(
+        &mut self,
+        user_input: String,
+        tx: mpsc::Sender<AgentEvent>,
+        cancel_flag: Arc<AtomicBool>,
+        pending_perms: Arc<std::sync::Mutex<std::collections::HashMap<String, oneshot::Sender<bool>>>>,
+    ) -> Result<()> {
         let backend = create_backend(&self.config);
         let tools = ToolRegistry::new(&self.config);
 
@@ -193,6 +242,12 @@ impl Agent {
         let tool_defs = tools.tool_defs();
 
         for _iteration in 0..MAX_ITERATIONS {
+            // Check for cancellation before each step
+            if cancel_flag.load(Ordering::Relaxed) {
+                let _ = tx.send(AgentEvent::Cancelled).await;
+                return Ok(());
+            }
+
             let history_snapshot = self.history.clone();
             let tx_clone = tx.clone();
 
@@ -222,6 +277,57 @@ impl Agent {
             let mut tool_results = Vec::new();
             for tc in &result.tool_calls {
                 let label = format_action_label(&tc.name, &tc.input);
+
+                // ── Permission check ────────────────────────────────
+                let arg = tc.input.to_string();
+                let perm = check_permission(
+                    &self.config.coding.trust_mode,
+                    &self.config.coding.rules,
+                    &tc.name,
+                    &arg,
+                );
+
+                match perm {
+                    PermCheck::Deny => {
+                        tool_results.push(ToolResult {
+                            call_id: tc.id.clone(),
+                            text: format!("Permission denied for tool '{}'", tc.name),
+                            image_b64: None,
+                        });
+                        continue;
+                    }
+                    PermCheck::NeedsPrompt => {
+                        let req_id = uuid::Uuid::new_v4().to_string();
+                        let (perm_tx, perm_rx) = oneshot::channel::<bool>();
+                        {
+                            let mut lock = pending_perms.lock().unwrap();
+                            lock.insert(req_id.clone(), perm_tx);
+                        }
+                        let _ = tx.send(AgentEvent::PermRequest {
+                            id: req_id,
+                            tool: tc.name.clone(),
+                            detail: label.clone(),
+                        }).await;
+
+                        // Wait for user response (or cancellation)
+                        let allowed = tokio::select! {
+                            res = perm_rx => res.unwrap_or(false),
+                            _ = tokio::time::sleep(std::time::Duration::from_secs(120)) => false,
+                        };
+
+                        if !allowed {
+                            tool_results.push(ToolResult {
+                                call_id: tc.id.clone(),
+                                text: format!("User denied permission for tool '{}'", tc.name),
+                                image_b64: None,
+                            });
+                            continue;
+                        }
+                    }
+                    PermCheck::Allow => {}
+                }
+                // ── End permission check ───────────────────────────
+
                 let _ = tx
                     .send(AgentEvent::Action {
                         name: tc.name.clone(),
@@ -241,9 +347,30 @@ impl Agent {
                         (format!("Tool error: {e}"), None)
                     });
 
+                // Self-feedback: append structured feedback to tool result
+                let feedback_suffix = match tc.name.as_str() {
+                    "bash" => feedback::bash_feedback(&text)
+                        .map(|fb| format!("\n\n{fb}"))
+                        .unwrap_or_default(),
+                    "write_file" => {
+                        let path = tc.input["path"].as_str().unwrap_or("");
+                        let fb = feedback::write_feedback(path);
+                        let wd = self.config.coding.effective_work_dir();
+                        let test_fb = feedback::test_reminder(&wd)
+                            .map(|t| format!("\n{t}"))
+                            .unwrap_or_default();
+                        format!("\n\n{fb}{test_fb}")
+                    }
+                    "edit_file" => {
+                        let path = tc.input["path"].as_str().unwrap_or("");
+                        format!("\n\n{}", feedback::write_feedback(path))
+                    }
+                    _ => String::new(),
+                };
+
                 tool_results.push(ToolResult {
                     call_id: tc.id.clone(),
-                    text,
+                    text: format!("{text}{feedback_suffix}"),
                     image_b64,
                 });
             }
@@ -280,6 +407,40 @@ fn load_me_md() -> Option<String> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+
+    #[test]
+    fn cancel_flag_starts_false() {
+        let flag = Arc::new(AtomicBool::new(false));
+        assert!(!flag.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn cancel_flag_can_be_set() {
+        let flag = Arc::new(AtomicBool::new(false));
+        flag.store(true, Ordering::Relaxed);
+        assert!(flag.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn cancel_flag_resets_to_false() {
+        let flag = Arc::new(AtomicBool::new(true));
+        flag.store(false, Ordering::Relaxed);
+        assert!(!flag.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn cancel_flag_shared_across_clones() {
+        let flag = Arc::new(AtomicBool::new(false));
+        let flag2 = flag.clone();
+        flag2.store(true, Ordering::Relaxed);
+        assert!(flag.load(Ordering::Relaxed));
+    }
 }
 
 fn format_action_label(name: &str, input: &Value) -> String {
