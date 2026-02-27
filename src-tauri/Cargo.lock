@@ -1275,10 +1275,12 @@ dependencies = [
  "dirs 5.0.1",
  "fastembed",
  "futures",
+ "glob",
  "hex",
  "hmac",
  "image",
  "md-5",
+ "regex",
  "reqwest 0.12.28",
  "rusqlite",
  "serde",
@@ -1288,6 +1290,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
@@ -1295,6 +1298,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "walkdir",
 ]
 
 [[package]]

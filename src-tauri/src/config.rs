@@ -3,6 +3,8 @@ use dirs::config_dir;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+use crate::permissions::{PermRule, TrustMode};
+
 fn config_path() -> PathBuf {
     config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
@@ -42,6 +44,32 @@ pub struct MobilityConfig {
     pub tuya_device_id: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CodingConfig {
+    /// Working directory for file/shell tools. Defaults to home dir.
+    #[serde(default)]
+    pub work_dir: String,
+    /// Permission mode: "prompt" | "full" | "custom"
+    #[serde(default)]
+    pub trust_mode: TrustMode,
+    /// Custom allow/deny rules (used when trust_mode = "custom").
+    #[serde(default)]
+    pub rules: Vec<PermRule>,
+}
+
+impl CodingConfig {
+    pub fn effective_work_dir(&self) -> String {
+        if self.work_dir.is_empty() {
+            dirs::home_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .to_string_lossy()
+                .to_string()
+        } else {
+            self.work_dir.clone()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// "anthropic" | "kimi" | "gemini" | "openai"
@@ -63,6 +91,8 @@ pub struct Config {
     pub tts: TtsConfig,
     #[serde(default)]
     pub mobility: MobilityConfig,
+    #[serde(default)]
+    pub coding: CodingConfig,
 }
 
 fn default_platform() -> String {
@@ -81,6 +111,7 @@ impl Default for Config {
             camera: CameraConfig::default(),
             tts: TtsConfig::default(),
             mobility: MobilityConfig::default(),
+            coding: CodingConfig::default(),
         }
     }
 }

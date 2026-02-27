@@ -1,6 +1,8 @@
 pub mod camera;
+pub mod fs;
 pub mod memory;
 pub mod mobility;
+pub mod shell;
 pub mod tapo_audio;
 pub mod tts;
 
@@ -19,10 +21,13 @@ pub struct ToolRegistry {
     pub tts: tts::TtsTool,
     pub mobility: mobility::MobilityTool,
     pub memory: memory::MemoryTool,
+    pub fs: fs::FsTool,
+    pub shell: shell::ShellTool,
 }
 
 impl ToolRegistry {
     pub fn new(config: &Config) -> Self {
+        let work_dir = config.coding.effective_work_dir();
         Self {
             camera: camera::CameraTool::new(
                 config.camera.host.clone(),
@@ -44,6 +49,8 @@ impl ToolRegistry {
                 config.mobility.tuya_device_id.clone(),
             ),
             memory: memory::MemoryTool::new(None),
+            fs: fs::FsTool::new(work_dir.clone()),
+            shell: shell::ShellTool::new(work_dir),
         }
     }
 
@@ -53,6 +60,8 @@ impl ToolRegistry {
         defs.extend(tts::TtsTool::tool_defs());
         defs.extend(mobility::MobilityTool::tool_defs());
         defs.extend(memory::MemoryTool::tool_defs());
+        defs.extend(fs::FsTool::tool_defs());
+        defs.extend(shell::ShellTool::tool_defs());
         defs
     }
 
@@ -86,6 +95,10 @@ impl ToolRegistry {
                 let n = input["n"].as_u64().unwrap_or(3) as usize;
                 Ok(self.memory.recall_memories(query, n)?)
             }
+            "read_file" | "write_file" | "edit_file" | "list_files" | "grep" => {
+                self.fs.execute(name, input)
+            }
+            "bash" => self.shell.bash(input).await,
             _ => Ok((format!("Unknown tool: {name}"), None)),
         }
     }

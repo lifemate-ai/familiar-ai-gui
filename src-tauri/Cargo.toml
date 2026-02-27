@@ -53,6 +53,12 @@ uuid = { version = "1", features = ["v4"] }
 # futures
 futures = "0.3"
 
+# Coding agent tools
+glob = "0.3"
+walkdir = "2"
+regex = "1"
+tempfile = "3"
+
 # Memory — SQLite storage + multilingual embedding (Python版の忠実移植)
 rusqlite = { version = "0.31", features = ["bundled"] }
 fastembed = "4"

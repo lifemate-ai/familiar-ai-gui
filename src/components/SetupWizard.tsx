@@ -53,15 +53,9 @@ export function SetupWizard({ onComplete }: Props) {
   const [cameraPass, setCameraPass] = useState("");
   const [elevenlabsKey, setElevenlabsKey] = useState("");
   const [voiceId, setVoiceId] = useState("cgSgspJ2msm6clMCkdW9");
+  const [workDir, setWorkDir] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-
-  async function goToPersona() {
-    // Load existing ME.md if present
-    const existing = await invoke<string>("get_me_md");
-    if (existing.trim()) setMeMd(existing);
-    setStep("persona");
-  }
 
   async function finish() {
     setSaving(true);
@@ -94,6 +88,11 @@ export function SetupWizard({ onComplete }: Props) {
             tuya_api_key: "",
             tuya_api_secret: "",
             tuya_device_id: "",
+          },
+          coding: {
+            work_dir: workDir,
+            trust_mode: "prompt",
+            rules: [],
           },
         },
       });
@@ -247,6 +246,20 @@ export function SetupWizard({ onComplete }: Props) {
                 onChange={(e) => setCameraPass(e.target.value)}
               />
             </label>
+          </details>
+
+          <details className="hardware-section">
+            <summary>コーディングエージェント</summary>
+            <label className="field">
+              作業ディレクトリ（work_dir）
+              <input
+                type="text"
+                placeholder="/home/user/myproject（空欄でホームディレクトリ）"
+                value={workDir}
+                onChange={(e) => setWorkDir(e.target.value)}
+              />
+            </label>
+            <p className="hint">設定するとコーディング専用モードになります</p>
           </details>
 
           <details className="hardware-section">
