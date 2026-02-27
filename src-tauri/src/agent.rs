@@ -121,6 +121,11 @@ impl Agent {
 
     // ── System prompt ──────────────────────────────────────────────
 
+    /// Dump the system prompt for evaluation / debugging (no episodic context).
+    pub fn eval_system_prompt(&mut self) -> String {
+        self.system_prompt(String::new(), None)
+    }
+
     /// Build the full system prompt, injecting world model, memory context,
     /// and desire context when relevant.
     fn system_prompt(&mut self, episodic_context: String, desire_context: Option<String>) -> String {

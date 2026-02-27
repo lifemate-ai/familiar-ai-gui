@@ -9,6 +9,10 @@ edition = "2021"
 name = "familiar_gui_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[[bin]]
+name = "dump_prompt"
+path = "src/bin/dump_prompt.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

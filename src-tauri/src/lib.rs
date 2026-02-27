@@ -1,12 +1,12 @@
-mod agent;
-mod backend;
-mod coding;
-mod config;
-mod desires;
-mod feedback;
-mod i18n;
-mod permissions;
-mod tools;
+pub mod agent;
+pub mod backend;
+pub mod coding;
+pub mod config;
+pub mod desires;
+pub mod feedback;
+pub mod i18n;
+pub mod permissions;
+pub mod tools;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};

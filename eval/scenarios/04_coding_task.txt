@@ -1,0 +1,1 @@
+src-tauri/src/agent.rs の system_prompt 関数にバグがある気がする。見てみて。
